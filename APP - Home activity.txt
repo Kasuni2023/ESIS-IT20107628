@@ -1,0 +1,38 @@
+package com.smart.shoe.activity.auth;
+
+import android.content.Intent;
+import android.os.Bundle;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+import com.smart.shoe.Firebase;
+import com.smart.shoe.R;
+import com.smart.shoe.activity.coach.CoachHomeActivity;
+import com.smart.shoe.activity.player.PlayerHomeActivity;
+import com.smart.shoe.entity.User;
+import java.util.Objects;
+
+public class HomeActivity extends AppCompatActivity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_home);
+
+        // Retrieve user information from Firebase
+        User currentUser = Firebase.user;
+
+        // Check user type and redirect accordingly
+        if (Objects.equals(currentUser.getType(), "Coach")) {
+            startActivity(new Intent(HomeActivity.this, CoachHomeActivity.class));
+        } else {
+            startActivity(new Intent(HomeActivity.this, PlayerHomeActivity.class));
+        }
+
+        finish(); // Finish this activity after redirecting
+    }
+
+    // Method for showing a toast message (for testing purposes only)
+    public void showTestMessage() {
+        Toast.makeText(this, "For testing purposes only!", Toast.LENGTH_SHORT).show();
+    }
+}

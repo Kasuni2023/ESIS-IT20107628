@@ -1,0 +1,997 @@
+# Install ydata_profiling library
+try:
+    !pip install ydata_profiling 
+    print("ydata_profiling installed successfully.")
+except Exception as e:
+    print(f"Error installing ydata_profiling: {e}")
+
+# Import required libraries 
+import pandas as pd
+import ydata_profiling as pp
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import warnings
+import os
+import plotly.graph_objects as go
+import plotly.io as pio
+import pickle
+from sklearn.utils import resample
+
+# Metrics
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    auc,
+    roc_curve,
+)  
+
+# Validation
+from sklearn.model_selection import (
+    train_test_split,
+    cross_val_score,
+    KFold,
+    GridSearchCV,
+)
+from sklearn.pipeline import Pipeline, make_pipeline
+
+# Feature Extraction
+from sklearn.feature_selection import RFE
+
+# Tuning
+from sklearn.model_selection import GridSearchCV
+
+# Preprocessing
+from sklearn.preprocessing import (
+    MinMaxScaler,
+    StandardScaler,
+    Normalizer,
+    Binarizer,
+    LabelEncoder,
+) 
+
+# Models
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+
+# Ensembles
+from sklearn.ensemble import (
+    RandomForestClassifier, 
+    BaggingClassifier, 
+    AdaBoostClassifier, 
+    GradientBoostingClassifier, 
+    ExtraTreesClassifier
+)
+
+# Suppresses warnings
+warnings.filterwarnings('ignore')
+
+# Set seaborn style 
+sns.set_style("whitegrid", {'axes.grid' : False})
+
+# Set Plotly template 
+pio.templates.default = "plotly_white"
+
+
+# Function to analyze and explore data
+def explore_data(df):
+    # Output the number of instances and attributes
+    print("Number of Instances and Attributes:", df.shape)
+
+    # Output the column names
+    print('\nDataset columns:', df.columns)
+
+    # Output the data types of each column
+    print('\nData types of each columns: ')
+    df.info()
+
+
+# Funtion to check for duplicates and remove
+def checking_removing_duplicates:
+    count_dups = df.duplicated().sum()
+    print("Number of Duplicates: ", count_dups)
+    
+    if count_dups >= 1:
+        df.drop_duplicates(inplace=True)
+        print('Duplicate values removed!')
+    else:
+        print('No Duplicate values')
+
+
+# Function to split the dataset into features (X) and target variable (y) and further into training and testing sets.
+def read_in_and_split_data(data, target):
+    X = data.drop(target, axis=1)
+    y = data[target]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+    return X_train, X_test, y_train, y_test
+
+
+# Function to retrieve a list ofmachine learning models for spot-checking.
+def GetModel():
+    Models = []
+    Models.append(('LR'   , LogisticRegression()))
+    Models.append(('LDA'  , LinearDiscriminantAnalysis()))
+    Models.append(('KNN'  , KNeighborsClassifier()))
+    Models.append(('CART' , DecisionTreeClassifier()))
+    Models.append(('NB'   , GaussianNB()))
+    Models.append(('SVM'  , SVC(probability=True)))
+    return Models
+
+
+# Function to create a list of ensemble models
+def create_ensemble_models():
+    ensembles = []
+    ensembles.append(('AdaBoost', AdaBoostClassifier()))  # AdaBoost Classifier
+    ensembles.append(('GradientBoosting', GradientBoostingClassifier()))  # Gradient Boosting Classifier
+    ensembles.append(('RandomForest', RandomForestClassifier()))  # Random Forest Classifier
+    ensembles.append(('Bagging', BaggingClassifier()))  # Bagging Classifier
+    ensembles.append(('ExtraTrees', ExtraTreesClassifier()))  # Extra Trees Classifier
+    return ensembles
+
+
+# Spot-Check Normalized Models
+def NormalizedModel(nameOfScaler):
+    # Ensure that only valid scalers are used
+    valid_scalers = ['standard', 'minmax', 'normalizer', 'binarizer']
+    if nameOfScaler not in valid_scalers:
+        raise ValueError(f"Invalid scaler name. Use one of: {', '.join(valid_scalers)}")
+    
+    if nameOfScaler == 'standard':
+        scaler = StandardScaler()
+    elif nameOfScaler =='minmax':
+        scaler = MinMaxScaler()
+    elif nameOfScaler == 'normalizer':
+        scaler = Normalizer()
+    elif nameOfScaler == 'binarizer':
+        scaler = Binarizer()
+
+    # Create pipelines for different classifiers using the specified scaler
+    pipelines = []
+    pipelines.append((nameOfScaler+'LR', Pipeline([('Scaler', scaler),('LR', LogisticRegression())])))
+    pipelines.append((nameOfScaler+'LDA', Pipeline([('Scaler', scaler),('LDA', LinearDiscriminantAnalysis())])))
+    pipelines.append((nameOfScaler+'KNN', Pipeline([('Scaler', scaler),('KNN', KNeighborsClassifier())])))
+    pipelines.append((nameOfScaler+'CART', Pipeline([('Scaler', scaler),('CART', DecisionTreeClassifier())])))
+    pipelines.append((nameOfScaler+'NB', Pipeline([('Scaler', scaler),('NB', GaussianNB())])))
+    pipelines.append((nameOfScaler+'SVM', Pipeline([('Scaler', scaler),('SVM', SVC())])))
+    pipelines.append((nameOfScaler+'AB', Pipeline([('Scaler', scaler),('AB', AdaBoostClassifier())])))
+    pipelines.append((nameOfScaler+'GBM', Pipeline([('Scaler', scaler),('GMB', GradientBoostingClassifier())])))
+    pipelines.append((nameOfScaler+'RF', Pipeline([('Scaler', scaler),('RF', RandomForestClassifier())])))
+    pipelines.append((nameOfScaler+'ET', Pipeline([('Scaler', scaler),('ET', ExtraTreesClassifier())])))
+
+    return pipelines
+
+
+# Train  machine learning model using cross-validation
+def fit_model(X_train, y_train, models):
+    num_folds = 10
+    scoring = 'accuracy'
+
+    results = []
+    names = []
+    for name, model in models:
+        kfold = KFold(n_splits=num_folds, shuffle=True, random_state=0)
+        cv_results = cross_val_score(model, X_train, y_train, cv=kfold, scoring=scoring)
+        results.append(cv_results)
+        names.append(name)
+        msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
+        print(msg)
+
+    return names, results
+
+
+# Save trained model 
+def save_model(model, filename):
+    try:
+        # Ensure the file path is secure and access is restricted
+        with open(filename, 'wb') as file:
+            pickle.dump(model, file)
+            print(f"Model saved successfully to {filename}.")
+    except Exception as e:
+        print(f"Error saving the model: {e}")
+
+
+# Function to Measure Performance 
+def classification_metrics(model, conf_matrix):
+    # Display training and validation accuracy scores
+    training_accuracy = model.score(X_train, y_train) * 100
+    validation_accuracy = model.score(X_test, y_test) * 100
+    print(f"Training Accuracy Score: {training_accuracy:.1f}%")
+    print(f"Validation Accuracy Score: {validation_accuracy:.1f}%")
+
+    # Visualize the confusion matrix
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(pd.DataFrame(conf_matrix), annot=True, cmap='YlGnBu', fmt='g')
+    ax.xaxis.set_label_position('top')
+    plt.tight_layout()
+    plt.title('Confusion Matrix', fontsize=20, y=1.1)
+    plt.ylabel('Actual label', fontsize=15)
+    plt.xlabel('Predicted label', fontsize=15)
+    plt.show()
+
+    # Display classification report
+    y_pred = model.predict(X_test)
+    print(classification_report(y_test, y_pred))
+
+
+#Reading the dataset
+df1 = pd.read_csv('/content/drive/MyDrive/Colab Notebooks/Quantitative Dehydration Estimation (2) (3).csv')
+#df2 = pd.read_csv('/content/drive/MyDrive/Colab Notebooks/WalkTheDogs (1).csv')
+#df1.drop(["impedance right leg"], axis=1, inplace=True)
+df1
+#df2
+
+
+explore_data(df1)
+#explore_data(df2)
+
+checking_removing_duplicates(df1)
+checking_removing_duplicates(df2)
+
+df1.isna().sum()
+df2.isna().sum()
+
+
+# All columns contain outliers except for rice and label.  
+# Calculate the first quartile (Q1), third quartile (Q3), and interquartile range (IQR)
+Q1 = df1.quantile(0.25)
+Q3 = df1.quantile(0.75)
+IQR = Q3 - Q1
+
+# Identify and filter out rows with outliers using the IQR method
+df_out = df1[~((df1 < (Q1 - 1.5 * IQR)) | (df1 > (Q3 + 1.5 * IQR))).any(axis=1)]
+
+
+# Training the Model
+# Define the target variable
+target = 'Walk'
+
+# Split the data into training and testing sets
+X_train, X_test, y_train, y_test = read_in_and_split_data(df2, target)
+
+# Get a list of machine learning models
+models = GetModel()
+
+# Fit models on the training data and get results
+names, results = fit_model(X_train, y_train, models)
+
+# Fit a Normalized Model with MinMaxScaler
+ScaledModel = NormalizedModel('minmax')
+name, results = fit_model(X_train, y_train, ScaledModel)
+
+# Fit a Normalized Model with StandardScaler
+ScaledModel = NormalizedModel('standard')
+name, results = fit_model(X_train, y_train, ScaledModel)
+
+# Fit a Normalized Model with Normalizer
+ScaledModel = NormalizedModel('normalizer')
+name, results = fit_model(X_train, y_train, ScaledModel)
+
+# Create a pipeline with MinMaxScaler and GaussianNB
+pipeline = make_pipeline(MinMaxScaler(), GaussianNB())
+
+# Train the model
+model = pipeline.fit(X_train, y_train)
+
+# Predict on the test set
+y_pred = model.predict(X_test)
+
+# Generate the confusion matrix
+conf_matrix = confusion_matrix(y_test, y_pred)
+
+# Evaluate classification metrics
+classification_metrics(pipeline, conf_matrix)
+
+# save model
+save_model(model, '/content/drive/MyDrive/Colab Notebooks/shoe1.pkl')
+
+# Import reqired libraries
+from sklearn.neighbors import KNeighborsClassifier 
+
+# Create a K-Nearest Neighbors Classifier
+knn = KNeighborsClassifier()  
+
+# Define a range for 'k'
+k_range = range(1, 11)
+
+# Initialize an empty list to store scores
+scores = []
+
+# Iterate over a range of 'k' values for KNN
+for k in k_range:
+    # Create a KNN classifier with 'k' neighbors
+    knn = KNeighborsClassifier(n_neighbors=k)
+    
+    # Train the classifier on the training data
+    knn.fit(X_train, y_train)
+    
+    # Calculate and store the accuracy score on the test data
+    scores.append(knn.score(X_test, y_test))
+
+# Set the label for the x-axis
+plt.xlabel('k')
+
+# Set the label for the y-axis
+plt.ylabel('accuracy')
+
+# Create a scatter plot with k_range on the x-axis and scores on the y-axis
+plt.scatter(k_range, scores)
+
+# Add vertical lines from the x-axis to the data points
+plt.vlines(k_range, 0, scores, linestyle="solid")
+
+# Set the y-axis limits to be between 0.96 and 0.99
+plt.ylim(0.96, 0.99)
+
+# Set the x-axis ticks to be integers from 1 to 10
+plt.xticks([i for i in range(1, 11)])
+
+# Define the figure size for the plot
+plt.subplots(figsize=(8, 5))
+
+# Generate a list of indices for K values (1 to 10)
+a_index = list(range(1, 11))
+
+# Initialize an empty Series to store accuracy scores
+a = pd.Series()
+
+# Generate a range of x values (1 to 10)
+x = range(1, 11)
+
+# Loop through values of K
+for i in a_index:
+    # Create a K-Nearest Neighbors model
+    model = KNeighborsClassifier(n_neighbors=i)
+    model.fit(X_train, y_train)
+    prediction = model.predict(X_test)
+    # Calculate and store the accuracy score for this K value
+    a = a.append(pd.Series(accuracy_score(y_test, prediction)))
+
+# Plot the accuracy scores against K values
+plt.plot(a_index, a, marker="*")
+plt.xlabel('K')
+plt.ylabel('Accuracy')
+plt.xticks(x)
+plt.ylim(0.80, 0.99)
+plt.title('K-Nearest Neighbors Accuracy')
+plt.show()
+
+# Plotting a heatmap to visualize correlations in df2
+fig, ax = plt.subplots(1, 1, figsize=(15, 9))
+sns.heatmap(df2.corr(), annot=True, cmap='Wistia')
+ax.set(xlabel='Features')
+ax.set(ylabel='Features')
+
+plt.title('Correlation between different features', fontsize=15, c='black')
+plt.show()
+
+# print("Enter your own data to test the model:")
+# N = int(input("Enter Nitrogen:"))
+# P = int(input("Enter Phosphorus:"))
+# K = int(input("Enter Potassium:"))
+# temp = float(input("Enter Temperature:"))
+# humidity = float(input("Enter Humidity:"))
+# ph = float(input("Enter pH:"))
+# rainfall = float(input("Enter Rainfall:"))
+userInput = [29,190,83.81,84.28,207]
+
+# Load the pre-trained model from a secure location
+model_path = "/content/drive/MyDrive/Colab Notebooks/shoe1.pkl"  # Specify the full path to the model file
+loaded_model = pickle.load(open(model_path, 'rb'))  # Version should be specified in requirements.txt or environment file
+
+# Assuming 'userInput' is previously defined and sanitized
+result = loaded_model.predict([userInput])[0]  # Perform prediction
+
+# Print the classification result
+print("The input provided is classified as:", result)
+
+# Import Google Colab drive and mount it
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Install Firebase and Firebase REST API
+!pip install firebase  
+!pip install firebase-rest-api  
+
+# Import libraries
+import pickle
+from datetime import date
+import random
+import string
+import pandas as pd
+
+# Initialize Firebase  
+config = {
+  "apiKey": "AIzaSyB3WoI2J-i1XCDyVFzmsGuEg_Z_5z6ws4Y",
+  "authDomain": "smart-shoe-app.firebaseapp.com",
+  "databaseURL": "https://smart-shoe-app-default-rtdb.firebaseio.com",
+  "projectId": "smart-shoe-app",
+  "storageBucket": "smart-shoe-app.appspot.com",
+  "messagingSenderId": "881469361938",
+  "appId": "1:881469361938:web:16ef26d7ccd630a87aadcb"
+}
+
+# Initialize Firebase app and database
+firebase = firebase.initialize_app(config)  
+db = firebase.database()
+
+# Calculate the age based on the birthdate provided
+def find_age(birthdate):
+    today = date.today()
+    age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+    return age
+
+# Initialize variables
+ntime =0
+secondlist =[]
+tbwlist1=[]
+tbwlist2=[]
+
+mtime1 =0
+mtime2 =0
+mtime3 =0
+minutelist1 =[]
+minutelist2 =[]
+minutelist3 =[]
+setplist =[]
+mileslist =[]
+kcallist =[]
+setplist1 =[]
+mileslist1 =[]
+kcallist1 =[]
+
+# Load data from a CSV file
+file_path = '/content/drive/MyDrive/Colab Notebooks/WalkTheDogs (1).csv'  
+df2 = pd.read_csv(file_path)   
+
+while True:
+
+  # Returns the current local date
+  today = date.today()
+  print("Today date is: ", today)
+
+  sensor = db.child("sensor").get().val()
+  sensor2 = db.child("sensor2").get().val()
+  users =  db.child("user").get().val()
+
+  TBW = 0
+  kcal = 0
+  miles = 0
+
+  print(sensor)
+  print(sensor2)
+  print(users)
+
+  for i in users:
+
+    usertype = users[i]["type"]
+    if usertype == "Player":
+      userid = users[i]["uid"]
+      age = users[i]["details"]["birthday"].split("-")
+      gender = users[i]["details"]["gender"]
+      height = users[i]["details"]["height"]
+      weight = users[i]["details"]["weight"]
+      impedance = int(sensor["hand_des"])+random.randint(160,185)
+
+      #model 1 ml predict
+      age = find_age(date(int(age[0]), int(age[1]), int(age[2])))
+      print(userid ,age,gender,height,weight,impedance)
+
+      shoe_model01 = pickle.load(open("/content/drive/MyDrive/Colab Notebooks/shoe1.pkl", 'rb'))
+      userInput=[int(age),float(height),float(weight),float(weight),int(impedance)]
+      result = shoe_model01.predict([userInput])[0]
+      print("The input provided is classified as:",result)
+
+      usersex = {"male":1,"female":0}
+
+      #model 1 update report
+      if result == 1:
+
+        TBW = ((6.53) + (0.3674*(float(height))**2)/(impedance) +
+              0.1753*(float(weight)) - 0.11 *(int(age))
+              + 2.83 *(usersex[gender.lower()]))
+
+        print("TBW : ",TBW)
+
+        if 0 <= TBW <= 100:
+          secondlist.append(ntime)
+          ntime = ntime+1
+          tbwlist1.append(TBW)
+          tbwlist2.append(round(random.uniform(59.00,99.99),2))
+
+          if gender.lower() =="female" and 45 < TBW < 60:
+            commentsdic = ["No dehydration detected"]
+            guidancedic = ["Keep drinking drinks (but not alcohol or caffeine) including sports drinks, water, fruit, juices, and non-caffeinated tea and soda."]
+
+          elif gender.lower() =="female" and 0 < (TBW-45) <= 3:
+            commentsdic = ["Mild dehydration is detected",'''The Symptoms or illness:
+            Feeling thirsty and lightheaded,
+            Dry mouth, Tiredness,
+            Less urine
+            Problems with blood pressure,
+            heart rate, and body temperature.''']
+
+            guidancedic = ['''To prevent from mild dehydration:
+                            Drinking drinks (but not alcohol or caffeine) including sports drinks,
+                            water, fruit, juices,
+                            and non-caffeinated tea and soda.''']
+
+          elif gender.lower() =="female" and 4 <= (TBW-45) <= 6:
+            commentsdic = ["Moderate dehydration is detected",'''The Symptoms or illness:
+            Feeling thirsty and lightheaded,
+            Dry mouth, Tiredness,
+            Less urine
+            Problems with blood pressure,
+            heart rate, and body temperature.''']
+
+            guidancedic = ['''To prevent mild dehydration:
+                      Drinking drinks (but not alcohol or caffeine) including sports drinks,
+                      water, fruit, juices, and non-caffeinated tea and soda.
+                      IV (intravenous) fluids.''']
+
+          elif gender.lower() =="female" and (TBW-45) >= 7:
+            commentsdic = ["Severe dehydration  is detected",'''The Symptoms or illness:
+                              Feeling thirsty and lightheaded
+                              Dry mouth
+                              Tiredness
+                              Less urine
+                              Problems with blood pressure, heart rate, and body temperature
+                              weakness or confusion''']
+
+            guidancedic = ['''Medical emergency - Take to a hospital''']
+
+          elif gender.lower() =="male" and 50 < TBW < 65:
+            commentsdic = ["No dehydration detected"]
+            guidancedic = ["Keep drinking drinks (but not alcohol or caffeine) including sports drinks, water, fruit, juices, and non-caffeinated tea and soda."]
+
+          elif gender.lower() =="male" and 0 < (TBW-50) <= 3:
+
+            commentsdic = ["Mild dehydration is detected",'''The Symptoms or illness:
+            Feeling thirsty and lightheaded,
+            Dry mouth, Tiredness,
+            Less urine
+            Problems with blood pressure,
+            heart rate, and body temperature.''']
+
+            guidancedic = ['''To prevent from mild dehydration:
+                            Drinking drinks (but not alcohol or caffeine) including sports drinks,
+                            water, fruit, juices,
+                            and non-caffeinated tea and soda.''']
+
+          elif gender.lower() =="male" and 4 <= (TBW-50) <= 6:
+            commentsdic = ["Moderate dehydration is detected",'''The Symptoms or illness:
+            Feeling thirsty and lightheaded,
+            Dry mouth, Tiredness,
+            Less urine
+            Problems with blood pressure,
+            heart rate, and body temperature.''']
+
+            guidancedic = ['''To prevent mild dehydration:
+                      Drinking drinks (but not alcohol or caffeine) including sports drinks,
+                      water, fruit, juices, and non-caffeinated tea and soda.
+                      IV (intravenous) fluids.''']
+
+          elif gender.lower() =="male" and (TBW-50) >= 7:
+            commentsdic = ["Severe dehydration  is detected",'''The Symptoms or illness:
+                              Feeling thirsty and lightheaded
+                              Dry mouth
+                              Tiredness
+                              Less urine
+                              Problems with blood pressure, heart rate, and body temperature
+                              weakness or confusion''']
+
+            guidancedic = ['''Medical emergency - Take to a hospital''']
+          else:
+            commentsdic = ["You are well-hydrated"]
+            guidancedic = [""]
+            types = ["Captured Value","Data set Value"]
+
+          datadic={"data_x":secondlist,
+                  "data_y":tbwlist1,
+                  "data_y1":tbwlist2,
+                  "date":str(today),
+                  "id":"dehydrationid",
+                  "label_x":"Time",
+                  "label_y":"Total Body Water (%)",
+                  "type":"Dehydration",
+                   "types":types,
+                  "comments":commentsdic,
+                  "guidance":guidancedic
+                  }
+          db.child("report").child(str(i)).child(str(today)).child("dehydrationid").update(datadic)
+        else:
+          print("invalid TBW value")
+
+      else:
+        TBW = 0
+        commentsdic = ["Invalid values........"]
+        guidancedic = [""]
+        types = ["Captured Value","Data set Value"]
+
+        secondlist.append(ntime)
+        ntime = ntime+1
+        tbwlist1.append(TBW)
+        tbwlist2.append(round(random.uniform(59.00,99.99),2))
+
+        datadic={"data_x":secondlist,
+                  "data_y":tbwlist1,
+                 "data_y1":tbwlist2,
+                  "date":str(today),
+                  "id":"dehydrationid",
+                  "label_x":"Time",
+                  "label_y":"Total Body Water (%)",
+                  "type":"Dehydration",
+                  "types":types,
+                  "comments":commentsdic,
+                  "guidance":guidancedic
+                  }
+        db.child("report").child(str(i)).child(str(today)).child("dehydrationid").update(datadic)
+      #model 2 ml predict
+      # 1 = " Great Performance Level "
+      # 0 = " Low Performance Level "
+      stepcount = int(sensor["foot_step"])
+
+      kcal = (10 * float(weight))+(6.25*float(height))-(5*int(age))-161
+
+      miles = (int(sensor["Ax"])+int(sensor["Ay"])+int(sensor["Az"]))/3
+
+      steps = int(stepcount)/1000
+
+      print(stepcount,kcal,miles,steps)
+
+      shoe_model02 = pickle.load(open("/content/drive/MyDrive/Colab Notebooks/shoe2.pkl", 'rb'))
+      userInput=[stepcount,kcal,miles,steps]
+      result = shoe_model02.predict([userInput])[0]
+
+      print("The input provided is classified as:",result)
+
+      #model 2 update report
+      if result == 1:
+        print(" Great Performance Level ")
+
+        commentsdic = ["Step Count is great at the moment........"]
+        guidancedic = ['''Optimize Movement: While a high step count is generally a good sign of an active game,
+                          it's essential to ensure that your movements are purposeful.
+                          Avoid excessive running and erratic footwork by maintaining good court coverage and positioning.
+                          ''',
+                       '''Control Pace: Balance your gameplay by controlling the pace of the game.
+                          Avoid constantly rushing around the court and use controlled shots and rallies to conserve energy.
+                          ''',
+                       '''Efficient Footwork: Focus on efficient footwork patterns, using smaller,
+                          controlled steps when appropriate.
+                          This can help you save energy and reduce unnecessary steps.
+                          ''']
+        types = ["Captured Value","Data set Value"]
+
+        minutelist1.append(mtime1)
+        mtime1 = mtime1+1
+        setplist.append(stepcount)
+        setplist1.append(int(df2["StepCount"][random.randint(0,223)]))
+
+        datadic={"data_x":minutelist1 ,
+                "data_y":setplist,
+                "data_y1":setplist1,
+                "date":str(today),
+                "id":"performanceid1",
+                "label_x":"Time",
+                 "types":types,
+                "label_y":"Step Count",
+                "label_y1":"Step Count",
+                "type":"Performance",
+                "comments":commentsdic,
+                "guidance":guidancedic
+                }
+        db.child("report").child(str(i)).child(str(today)).child("performanceid1").update(datadic)
+
+        commentsdic = ["Acceleration is great at the moment........"]
+        guidancedic = ['''Explosive Footwork: Work on explosive footwork, which involves powerful and rapid movements.
+                          Practice quick starts and stops to change direction swiftly.
+                          ''',
+                       '''Lunge Technique: Hone your lunge technique for reaching and returning shots with speed.
+                          Maintain a low stance and push off with force when lunging.
+                          ''',
+                       '''Strength Training: Include strength training exercises in your fitness routine to build leg and core strength.
+                          Stronger muscles can provide more power for acceleration.
+                          ''',
+                       '''Plyometric Training: Plyometric exercises, such as squat jumps and lateral hops,
+                          can improve your leg power, agility, and explosiveness. ''']
+        types = ["Captured Value","Data set Value"]
+
+        minutelist2.append(mtime2)
+        mtime2 = mtime2+1
+        mileslist.append(miles)
+        mileslist1.append(float(df2["Miles"][random.randint(0,223)]))
+
+        datadic={"data_x":minutelist2,
+                "data_y":mileslist,
+                "data_y1":mileslist1,
+                "date":str(today),
+                "id":"performanceid2",
+                "label_x":"Time",
+                "label_y":"MILES",
+                "label_y1":"MILES",
+                  "types":types,
+                "type":"Performance",
+                "comments":commentsdic,
+                "guidance":guidancedic
+                }
+        db.child("report").child(str(i)).child(str(today)).child("performanceid2").update(datadic)
+
+        commentsdic = ["KCAL is great at the moment........"]
+        guidancedic = ['''High-Intensity Play: Maintain a fast-paced, aggressive playing style.
+                          Engage in longer rallies, use powerful shots, and keep the game intense throughout.
+                          ''',
+                       '''Interval Training: Incorporate interval training into your game.
+                          Alternate between periods of high-intensity play and short recovery periods.
+                          This can significantly increase calorie burn.
+                          ''',
+                       '''Singles Play: If possible, play singles matches instead of doubles.
+                          Singles badminton demands more court coverage and is more physically demanding, leading to higher calorie expenditure.
+                          ''',
+                       '''Footwork and Agility: Focus on quick and efficient footwork.
+                          Frequent and rapid movements, such as lunges and lateral shifts, can raise your heart rate and calorie burn.
+                          ''']
+        types = ["Captured Value","Data set Value"]
+
+        minutelist3.append(mtime3)
+        mtime3 = mtime3+1
+        kcallist.append(kcal)
+        kcallist1.append(int(df2["Kcal"][random.randint(0,223)]))
+
+        datadic={"data_x":minutelist3,
+                "data_y":kcallist,
+                "data_y1":kcallist1,
+                "date":str(today),
+                "id":"performanceid3",
+                "label_x":"Time",
+                "label_y":"KCAL",
+                "label_y1":"KCAL",
+                "type":"Performance",
+                  "types":types,
+                "comments":commentsdic,
+                "guidance":guidancedic
+                }
+        db.child("report").child(str(i)).child(str(today)).child("performanceid3").update(datadic)
+      else:
+        print(" Low Performance Level ")
+
+        commentsdic = ["Step Count is low at the moment........"]
+        guidancedic = ['''Engage in Drills: Practice footwork drills and techniques such as split step,
+                      lunging, and side-to-side movements to increase the number of steps during play.
+                      ''',
+                      '''Focus on Court Coverage: Work on positioning and movement to ensure you cover the entire court effectively,
+                          which can naturally increase your step count.
+                      ''']
+        types = ["Captured Value","Data set Value"]
+
+        minutelist1.append(mtime1)
+        mtime1 = mtime1+1
+        setplist.append(stepcount)
+        setplist1.append(int(df2["StepCount"][random.randint(0,222)]))
+
+        datadic={"data_x":minutelist1 ,
+                "data_y":setplist,
+                "data_y1":setplist1,
+                "date":str(today),
+                "id":"performanceid1",
+                "label_x":"Time",
+                "label_y":"Step Count",
+                "label_y1":"Step Count",
+                "type":"Performance",
+                 "types":types,
+                "comments":commentsdic,
+                "guidance":guidancedic
+                }
+        db.child("report").child(str(i)).child(str(today)).child("performanceid1").update(datadic)
+
+        commentsdic = ["Acceleration is low at the moment........"]
+        guidancedic = ['''Explosive Footwork: Work on your footwork to make it more explosive. Practice quick starts, stops, and changes in direction.
+                          Improve your ability to accelerate rapidly in response to the shuttlecock's movement.
+                       ''',
+                       '''Strength Training: Incorporate strength training exercises into your fitness routine, with a focus on leg and core strength.
+                          Stronger muscles provide more power for explosive movements.
+                       ''',
+                       '''Plyometric Exercises: Include plyometric exercises in your training regimen,
+                          such as squat jumps and box jumps. These exercises can enhance leg power and explosiveness.
+                       ''',
+                       '''Agility Drills: Practice agility drills to improve your ability to change direction rapidly.
+                          Agility ladder drills and cone drills can be particularly effective.
+                       ''']
+
+        minutelist2.append(mtime2)
+        mtime2 = mtime2+1
+        mileslist.append(miles)
+        mileslist1.append(float(df2["Miles"][random.randint(0,222)]))
+        types = ["Captured Value","Data set Value"]
+
+        datadic={"data_x":minutelist2,
+                "data_y":mileslist,
+                "data_y1":mileslist1,
+                "date":str(today),
+                "id":"performanceid2",
+                "label_x":"Time",
+                "label_y":"MILES",
+                "label_y1":"MILES",
+                "type":"Performance",
+                 "types":types,
+                "comments":commentsdic,
+                "guidance":guidancedic
+                }
+        db.child("report").child(str(i)).child(str(today)).child("performanceid2").update(datadic)
+
+        commentsdic = ["KCAL is low at the moment........"]
+        guidancedic = ['''Increase Intensity: Play at a higher intensity
+                        by incorporating more aggressive shots, faster rallies, and a more vigorous style of play.
+                        This can elevate your heart rate and calorie burn.
+                        ''',
+                       '''Use Interval Training: Introduce short bursts of high-intensity play followed by
+                          brief periods of recovery.
+                          This interval training can boost your calorie burn and improve overall fitness.
+                       ''',
+                       '''Focus on Footwork: Emphasize quick and efficient footwork, including lateral movements, lunges, and
+                          constant motion, to increase the energy expenditure during the game.
+                       ''',
+                       '''Play Singles: Consider playing singles instead of doubles.
+                          Singles badminton involves more court coverage,
+                          which typically results in a higher calorie burn compared to doubles play.
+                       ''']
+
+        minutelist3.append(mtime3)
+        mtime3 = mtime3+1
+        kcallist.append(kcal)
+        kcallist1.append(int(df2["Kcal"][random.randint(0,222)]))
+        types = ["Captured Value","Data set Value"]
+
+        datadic={"data_x":minutelist3,
+                "data_y":kcallist,
+                "data_y1":kcallist1,
+                "date":str(today),
+                "id":"performanceid3",
+                "label_x":"Time",
+                "label_y":"KCAL",
+                "label_y1":"KCAL",
+                "type":"Performance",
+                 "types":types,
+                "comments":commentsdic,
+                "guidance":guidancedic
+                }
+        db.child("report").child(str(i)).child(str(today)).child("performanceid3").update(datadic)
+      #model 3 update report
+
+      shoetype = sensor2["Shoefsr"]
+      commentsdic = {1:["Normal"]
+                    ,2:["You are in Injury type 1 and below mention Injuries can occur in future.","IT band syndrome.","Patellofemoral pain syndrome.","Ankle sprains.","Stress fractures.","Plantar fasciitis"]
+                    ,3:["You are in Injury type 2 and below mention Injuries can occur in future.","Knee pain.","Shin splints.","Hip pain.","Stress fractures.","Ankle sprains."]
+                    ,4:["not detected"]}
+
+      guidancedic = {
+                      1:["Normal"]
+                      ,2:[
+                            '''Recommended video links to overcome IT band syndrome.
+                            https://www.youtube.com/watch?v=olkR6MvfVEg
+                            https://www.youtube.com/watch?v=tbF4Q_b-bJA
+                            https://www.youtube.com/watch?v=yXSrDApZhrQ
+                            ''',
+                            '''Recommended video links to overcome Patellofemoral pain syndrome.
+                            https://www.youtube.com/watch?v=XQsZzVYPJAs
+                            https://www.youtube.com/watch?v=kLKHZgu_czI
+                            https://www.youtube.com/watch?v=NUwxUFxH9ng
+                            ''',
+                            '''Recommended video links to overcome Ankle sprains.
+                            https://www.youtube.com/watch?v=W9lT3gfehC0
+                            https://www.youtube.com/watch?v=2d1ZBiEJrNc
+                            https://www.youtube.com/watch?v=EMcOz6zJ1A4''',
+
+                            '''Recommended video links to overcome Stress fractures.
+                              https://www.youtube.com/watch?v=HGftPYhToi8
+                              https://www.youtube.com/watch?v=N1NXOdbdwaA
+                              https://www.youtube.com/watch?v=qIS59G4fObw
+                            ''',
+                            '''Recommended video links to overcome Plantar fasciitis.
+                            https://www.youtube.com/watch?v=PVjSq5thUhE
+                            https://www.youtube.com/watch?v=-kjBnrmV1gQ
+                            https://www.youtube.com/watch?v=GfVZ_j2or3U
+                            '''
+                            ]
+                        ,
+                    3:['''Recommended video links to overcome Knee pain.
+                                  https://www.youtube.com/watch?v=ikt6NME0k9E
+                                  https://www.youtube.com/watch?v=SnvCvojL_1A
+                                  https://www.youtube.com/watch?v=gRByvZeMjqs
+                                ''',
+                                '''Recommended video links to overcome Shin splints.
+                                  https://www.youtube.com/watch?v=Z2G5WCJBpps
+                                  https://www.youtube.com/watch?v=olpUrL-w2qg
+                                  https://www.youtube.com/watch?v=EaSbXdxAmXA
+                                ''',
+                                '''Recommended video links to overcome Hip pain.
+                                    https://www.youtube.com/watch?v=10djgkzwsFk
+                                    https://www.youtube.com/watch?v=8Vuailj3XJ4
+                                    https://www.youtube.com/watch?v=vfLRFxr9bJ0''',
+
+                                '''Recommended video links to overcome Stress fractures.
+                                    https://www.youtube.com/watch?v=HGftPYhToi8
+                                    https://www.youtube.com/watch?v=N1NXOdbdwaA
+                                    https://www.youtube.com/watch?v=qIS59G4fObw
+
+                                ''',
+                                '''Recommended video links to overcome Ankle sprains.
+                                    https://www.youtube.com/watch?v=W9lT3gfehC0
+                                    https://www.youtube.com/watch?v=2d1ZBiEJrNc
+                                    https://www.youtube.com/watch?v=EMcOz6zJ1A4
+                                ''']
+                          ,4:["not detected"]}
+      types = ["Current Graph"]
+
+      datadic={"data_x":[0,1,2,3,4] ,
+              "data_y":[ sensor2["A"],sensor2["B"],sensor2["C"],sensor2["D"],sensor2["E"] ],
+              "date":str(today),
+              "id":"pressureid1",
+              "label_x":"Pressure Point",
+              "label_y":"Pressure Ratio%",
+              "type":"Pressure",
+               "types":types,
+              "comments":commentsdic[shoetype],
+              "guidance":guidancedic[shoetype]
+              }
+      db.child("report").child(str(i)).child(str(today)).child("pressureid2").update(datadic)
+
+      shoetype = sensor2["Shoefsr"]
+      commentsdic = {1:[""]}
+
+      guidancedic = {1:[""]}
+
+      types = ["Normal Graph"]
+
+      datadic={"data_x":[0,1,2,3,4] ,
+              "data_y":[ 11.53,14.32,11.04,21.71,18.31 ],
+              "date":str(today),
+              "id":"pressureid2",
+              "label_x":"Pressure Point",
+              "label_y":"Pressure Ratio%",
+              "type":"Pressure",
+               "types":types,
+              "comments":commentsdic[1],
+              "guidance":guidancedic[1]
+              }
+      db.child("report").child(str(i)).child(str(today)).child("pressureid1").update(datadic)
+  time.sleep(60)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

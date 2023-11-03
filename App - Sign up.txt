@@ -1,0 +1,34 @@
+package com.smart.shoe.activity.auth;
+
+import androidx.appcompat.app.AppCompatActivity;
+
+import android.content.Intent;
+import android.os.Bundle;
+
+import com.smart.shoe.R;
+
+// This activity allows users to select their role for signup
+public class SignupSelectActivity extends AppCompatActivity {
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_signup_select);
+
+        // Set up click listeners for the buttons
+        findViewById(R.id.ass_back).setOnClickListener(v -> finish()); // "Back" button
+
+        // "Coach" button
+        findViewById(R.id.ass_coach).setOnClickListener(v -> {
+            RegisterActivity.player = false; // Set player flag to false (assuming RegisterActivity has a static boolean variable named 'player')
+            startActivity(new Intent(SignupSelectActivity.this, RegisterActivity.class)); // Start RegisterActivity
+        });
+
+        // "Player" button
+        findViewById(R.id.ass_player).setOnClickListener(v -> {
+            RegisterActivity.player = true; // Set player flag to true (assuming RegisterActivity has a static boolean variable named 'player')
+            startActivity(new Intent(SignupSelectActivity.this, RegisterActivity.class)); // Start RegisterActivity
+        });
+
+    }
+}
